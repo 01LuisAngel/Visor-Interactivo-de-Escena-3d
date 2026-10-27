@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diario antiguo</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #1a1410; font-family: Georgia, serif; }
+    #info { position: absolute; top: 10px; left: 10px; color: #b8a384; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div id="info">Arrastra: gira en X e Y &nbsp;|&nbsp; Rueda del mouse o teclas Q / E: gira en Z &nbsp;|&nbsp; Barra espaciadora: pausa el giro automatico</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  /* ====================================================================
+     RESUMEN DEL PIPELINE DE TRANSFORMACIONES (donde se aplica cada matriz)
+     --------------------------------------------------------------------
+     Para cada vertice, Three.js ejecuta en el vertex shader:
+
+       gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(posicion, 1.0)
+
+     1) MODELO     (modelMatrix)      -> position / rotation de cada pieza y del
+                                         pivote (ver crearDiario() y "pivote").
+     2) VISTA      (viewMatrix)       -> posicion y orientacion de la camara
+                                         (ver "camara.position" y "camara.lookAt").
+     3) PROYECCION (projectionMatrix) -> PerspectiveCamera (fov, aspect, near, far)
+                                         (ver "new THREE.PerspectiveCamera" y "resize").
+
+     El calculo se dispara en renderer.render(escena, camara), dentro de ciclo().
+     ==================================================================== */
+
+  // ---------- Escena ----------
+  const escena = new THREE.Scene();
+  escena.background = new THREE.Color(0x1a1410);
+
+  const camara = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+  // >>> PROYECCION: la PerspectiveCamera de arriba construye camara.projectionMatrix
+  //     con fov = 50 grados, aspect = ancho/alto, near = 0.1 y far = 100.
+  //     Esta matriz hace la proyeccion en perspectiva (los objetos lejanos se ven mas chicos).
+
+  // >>> MATRIZ DE VISTA: position y lookAt definen la posicion/orientacion de la camara
+  //     (camara.matrixWorld). Su INVERSA (camara.matrixWorldInverse) es la matriz de vista,
+  //     que mueve todo el mundo al sistema de coordenadas de la camara.
+  camara.position.set(0, 0, 6.5);   // traslacion de la camara
+  camara.lookAt(0, 0, 0);           // orientacion de la camara hacia el origen
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  // Luces calidas, como una lampara de escritorio
+  escena.add(new THREE.AmbientLight(0x9a8570, 0.55));
+  const lampara = new THREE.PointLight(0xffd9a0, 1.3, 14);
+  lampara.position.set(2.5, 4, 2);
+  lampara.castShadow = true;
+  escena.add(lampara);
+  const relleno = new THREE.DirectionalLight(0xffffff, 0.25);
+  relleno.position.set(-3, 3, -2);
+  escena.add(relleno);
+
+  // ---------- Texturas hechas con canvas ----------
+  function texturaCuero() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#6b4423';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 3500; i++) {
+      const claro = Math.random() > 0.5;
+      g.fillStyle = claro ? 'rgba(160,110,60,0.18)' : 'rgba(30,15,5,0.2)';
+      g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+    for (let i = 0; i < 14; i++) {  // rayones y desgaste
+      g.strokeStyle = 'rgba(190,150,100,0.18)';
+      g.lineWidth = 1;
+      g.beginPath();
+      const x = Math.random() * 256, y = Math.random() * 256;
+      g.moveTo(x, y);
+      g.lineTo(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 60);
+      g.stroke();
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texturaPaginas(vertical) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#d9c593';
+    g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = 'rgba(110,85,45,0.45)';
+    g.lineWidth = 1;
+    for (let i = 0; i < 128; i += 3) {
+      g.beginPath();
+      if (vertical) { g.moveTo(i, 0); g.lineTo(i, 128); }
+      else { g.moveTo(0, i); g.lineTo(128, i); }
+      g.stroke();
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function texturaEtiqueta() {
+    const c = document.createElement('canvas');
+    c.width = 400; c.height = 250;
+    const g = c.getContext('2d');
+    g.fillStyle = '#e3d3a6';
+    g.fillRect(0, 0, 400, 250);
+    for (let i = 0; i < 1200; i++) {
+      g.fillStyle = 'rgba(120,90,40,0.12)';
+      g.fillRect(Math.random() * 400, Math.random() * 250, 2, 2);
+    }
+    g.strokeStyle = '#4a3320';
+    g.lineWidth = 4;
+    g.strokeRect(12, 12, 376, 226);
+    g.lineWidth = 1.5;
+    g.strokeRect(22, 22, 356, 206);
+    g.fillStyle = '#3a2615';
+    g.textAlign = 'center';
+    g.font = 'bold 64px Georgia, serif';
+    g.fillText('DIARIO', 200, 120);
+    g.font = 'italic 28px Georgia, serif';
+    g.fillText('Cuaderno personal', 200, 165);
+    g.fillRect(110, 185, 180, 2);
+    return new THREE.CanvasTexture(c);
+  }
+
+  // ---------- Diario ----------
+  function crearDiario() {
+    const grupo = new THREE.Group();
+
+    const cuero = new THREE.MeshStandardMaterial({ map: texturaCuero(), roughness: 0.9, metalness: 0 });
+    const cueroOscuro = new THREE.MeshStandardMaterial({ color: 0x3f2814, roughness: 0.95 });
+    const correa = new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 0.85 });
+    const laton = new THREE.MeshStandardMaterial({ color: 0xa8843a, roughness: 0.45, metalness: 0.85 });
+
+    const anadir = (geometria, material, x, y, z) => {
+      const m = new THREE.Mesh(geometria, material);
+      // >>> TRANSFORMACION DE MODELO (traslacion): position.set(x, y, z) genera una
+      //     matriz de traslacion local para esta pieza (m.matrix). Cada pieza queda
+      //     colocada en su lugar dentro del diario (tapas, lomo, paginas, correa...).
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      grupo.add(m);
+      return m;
+    };
+
+    // Tapas (frente y atras)
+    anadir(new THREE.BoxGeometry(1.7, 2.3, 0.08), cuero, 0.02, 0, 0.21);
+    anadir(new THREE.BoxGeometry(1.7, 2.3, 0.08), cuero, 0.02, 0, -0.21);
+
+    // Lomo
+    anadir(new THREE.BoxGeometry(0.12, 2.3, 0.5), cueroOscuro, -0.82, 0, 0);
+    // Nervios del lomo
+    [-0.85, -0.3, 0.3, 0.85].forEach(y => {
+      anadir(new THREE.BoxGeometry(0.15, 0.07, 0.54), cueroOscuro, -0.83, y, 0);
+    });
+
+    // Bloque de paginas con bordes rayados
+    const lisa = new THREE.MeshStandardMaterial({ color: 0xcdb98a });
+    const bordeVertical = new THREE.MeshStandardMaterial({ map: texturaPaginas(true), roughness: 1 });
+    const bordeHorizontal = new THREE.MeshStandardMaterial({ map: texturaPaginas(false), roughness: 1 });
+    anadir(
+      new THREE.BoxGeometry(1.55, 2.15, 0.34),
+      [bordeVertical, bordeVertical, bordeHorizontal, bordeHorizontal, lisa, lisa],
+      0.04, 0, 0
+    );
+
+    // Marco de costura en la portada
+    const marco = [
+      [1.35, 0.03, 0.05, 0.9],
+      [1.35, 0.03, 0.05, -0.9],
+      [0.03, 1.83, 0.69, 0],
+      [0.03, 1.83, -0.59, 0]
+    ];
+    marco.forEach(([w, h, x, y]) => {
+      anadir(new THREE.BoxGeometry(w, h, 0.01), cueroOscuro, x, y, 0.255);
+    });
+
+    // Etiqueta de papel pegada en la portada
+    const etiqueta = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.85, 0.53),
+      new THREE.MeshStandardMaterial({ map: texturaEtiqueta(), roughness: 1 })
+    );
+    etiqueta.position.set(0.05, 0.45, 0.262);   // >>> matriz de traslacion de la etiqueta
+    etiqueta.receiveShadow = true;
+    grupo.add(etiqueta);
+
+    // Correa de cuero: frente, borde y lengueta atras
+    anadir(new THREE.BoxGeometry(0.95, 0.2, 0.025), correa, 0.42, -0.35, 0.265);
+    anadir(new THREE.BoxGeometry(0.03, 0.2, 0.55), correa, 0.89, -0.35, 0);
+    anadir(new THREE.BoxGeometry(0.4, 0.2, 0.025), correa, 0.68, -0.35, -0.265);
+
+    // Hebilla de laton
+    anadir(new THREE.BoxGeometry(0.18, 0.28, 0.03), laton, -0.02, -0.35, 0.28);
+    anadir(new THREE.BoxGeometry(0.1, 0.19, 0.035), correa, -0.02, -0.35, 0.285);
+    anadir(new THREE.BoxGeometry(0.2, 0.025, 0.03), laton, -0.02, -0.35, 0.3);
+
+    // Marcapaginas de tela asomando por abajo
+    anadir(
+      new THREE.BoxGeometry(0.09, 0.45, 0.012),
+      new THREE.MeshStandardMaterial({ color: 0x7a1c22, roughness: 1 }),
+      0.3, -1.3, 0
+    );
+
+    return grupo;
+  }
+
+  // El diario flota en el centro, sin suelo, para poder girarlo en los 3 ejes
+  const pivote = new THREE.Group();
+  const diario = crearDiario();
+  pivote.add(diario);   // JERARQUIA: modelMatrix final de cada pieza = pivote.matrix * pieza.matrix
+  // >>> TRANSFORMACION DE MODELO (rotacion): rotation.set(x, y, z) en radianes se convierte
+  //     en las matrices de rotacion Rx, Ry y Rz, que se aplican a TODO el diario a la vez
+  //     porque todas las piezas son hijas de "pivote".
+  pivote.rotation.set(0.25, -0.5, 0);
+  escena.add(pivote);
+
+  // ---------- Controles: 3 ejes ----------
+  let arrastrando = false, ultimoX = 0, ultimoY = 0, giroAutomatico = true;
+
+  // Arrastrar: horizontal = eje Y, vertical = eje X
+  renderer.domElement.addEventListener('mousedown', e => {
+    arrastrando = true; ultimoX = e.clientX; ultimoY = e.clientY;
+  });
+  addEventListener('mouseup', () => { arrastrando = false; });
+  addEventListener('mousemove', e => {
+    if (!arrastrando) return;
+    // >>> TRANSFORMACION DE MODELO (rotacion): se actualizan los angulos y Three.js
+    //     recalcula pivote.matrix con las matrices de rotacion Ry (horizontal) y Rx (vertical).
+    pivote.rotation.y += (e.clientX - ultimoX) * 0.01;   // matriz Ry (eje Y)
+    pivote.rotation.x += (e.clientY - ultimoY) * 0.01;   // matriz Rx (eje X)
+    ultimoX = e.clientX; ultimoY = e.clientY;
+  });
+
+  // Rueda del mouse: eje Z
+  addEventListener('wheel', e => {
+    // >>> TRANSFORMACION DE MODELO (rotacion): matriz Rz (eje Z)
+    pivote.rotation.z += e.deltaY * 0.003;
+  });
+
+  // Teclado: Q / E giran en Z, espacio pausa o reanuda el giro automatico
+  addEventListener('keydown', e => {
+    if (e.key === 'q' || e.key === 'Q') pivote.rotation.z -= 0.1;
+    if (e.key === 'e' || e.key === 'E') pivote.rotation.z += 0.1;
+    if (e.code === 'Space') { giroAutomatico = !giroAutomatico; e.preventDefault(); }
+  });
+
+  // ---------- Animacion ----------
+  const reloj = new THREE.Clock();
+  function ciclo() {
+    const dt = reloj.getDelta();
+    if (giroAutomatico && !arrastrando) {
+      // >>> TRANSFORMACION DE MODELO (rotacion animada): en cada cuadro se incrementan
+      //     los angulos, o sea, se recalculan las matrices Rx, Ry y Rz del pivote.
+      pivote.rotation.x += dt * 0.25;
+      pivote.rotation.y += dt * 0.4;
+      pivote.rotation.z += dt * 0.15;
+    }
+    // >>> AQUI SE APLICA TODO EL PIPELINE: render() actualiza las matrices del modelo
+    //     (matrixWorld de cada pieza), calcula la matriz de vista a partir de la camara
+    //     y usa camara.projectionMatrix. El vertex shader las multiplica:
+    //     projectionMatrix * viewMatrix * modelMatrix * posicion  -> pixel en pantalla.
+    renderer.render(escena, camara);
+    requestAnimationFrame(ciclo);
+  }
+  ciclo();
+
+  addEventListener('resize', () => {
+    camara.aspect = innerWidth / innerHeight;
+    // >>> PROYECCION: al cambiar el aspect hay que reconstruir la matriz de proyeccion
+    //     de la camara; si no, el diario se vería deformado al redimensionar la ventana.
+    camara.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+</script>
+</body>
+</html>
