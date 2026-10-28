@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba - Espejo Roto (figura paramétrica)</title>
+  <style>
+    body { background:#0b0b0d; color:#eee; font-family:sans-serif; text-align:center; margin:0; padding:16px; }
+    canvas { background:#000; border:1px solid #600; cursor:grab; max-width:100%; }
+    .panel { display:inline-block; text-align:left; margin-top:12px; }
+    label { display:block; margin:8px 0; }
+    input[type=range] { width:300px; vertical-align:middle; }
+    b { color:#ff4d5a; }
+  </style>
+</head>
+<body>
+  <h2>Espejo Roto <small>(arrastra con el mouse para rotar)</small></h2>
+  <canvas id="visor" width="800" height="600"></canvas>
+
+  <div class="panel">
+    <label>Número de grietas: <b id="vGrietas">8</b><br>
+      <input id="sGrietas" type="range" min="3" max="16" step="1" value="8">
+    </label>
+    <label>Separación de fragmentos: <b id="vSep">0.30</b><br>
+      <input id="sSep" type="range" min="0" max="1" step="0.01" value="0.3">
+    </label>
+  </div>
+
+  <script>
+    // ============================================================
+    // FIGURA: ESPEJO ROTO  (esta parte es la de figuras/espejo-roto.js)
+    // ============================================================
+    function pseudoAleatorio(n) {
+      const x = Math.sin(n * 12.9898) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
+    function generarEspejoRoto(grietas, separacion) {
+      const vertices = [];
+      const aristas = [];
+      const caras = [];
+      const R = 1;
+
+      const angulos = [];
+      for (let k = 0; k <= grietas; k++) {
+        const base = (2 * Math.PI * k) / grietas;
+        const esExtremo = (k === 0 || k === grietas);
+        const ruido = esExtremo ? 0 : (pseudoAleatorio(k) - 0.5) * 0.5 * (2 * Math.PI / grietas);
+        angulos.push(base + ruido);
+      }
+
+      for (let i = 0; i < grietas; i++) {
+        const a0 = angulos[i];
+        const a1 = angulos[i + 1];
+        const am = (a0 + a1) / 2;
+
+        const dirX = Math.cos(am);
+        const dirY = Math.sin(am);
+        const distancia = separacion * (0.15 + 0.45 * pseudoAleatorio(i + 50));
+        const inclinacion = (pseudoAleatorio(i + 100) - 0.5) * 1.2;
+
+        const locales = [
+          [0, 0],
+          [R * Math.cos(a0), R * Math.sin(a0)],
+          [R * Math.cos(am), R * Math.sin(am)],
+          [R * Math.cos(a1), R * Math.sin(a1)],
+        ];
+
+        const base = vertices.length;
+        for (const [px, py] of locales) {
+          const x = px + dirX * distancia;
+          const y = py + dirY * distancia;
+          const z = separacion * inclinacion * Math.hypot(px, py);
+          vertices.push([x, y, z]);
+        }
+
+        aristas.push([base, base + 1]);
+        aristas.push([base + 1, base + 2]);
+        aristas.push([base + 2, base + 3]);
+        aristas.push([base + 3, base]);
+
+        caras.push([base, base + 1, base + 2, base + 3]);
+      }
+
+      return { vertices, aristas, caras };
+    }
+
+    // ============================================================
+    // VISOR DE PRUEBA (solo para ver la figura)
+    // ============================================================
+    const canvas = document.getElementById("visor");
+    const ctx = canvas.getContext("2d");
+    const sGrietas = document.getElementById("sGrietas");
+    const sSep = document.getElementById("sSep");
+
+    let rotX = -0.5, rotY = 0.5;
+    let arrastrando = false, ultimoX = 0, ultimoY = 0;
+
+    function rotar([x, y, z]) {
+      let y1 = y * Math.cos(rotX) - z * Math.sin(rotX);
+      let z1 = y * Math.sin(rotX) + z * Math.cos(rotX);
+      let x2 = x * Math.cos(rotY) + z1 * Math.sin(rotY);
+      let z2 = -x * Math.sin(rotY) + z1 * Math.cos(rotY);
+      return [x2, y1, z2];
+    }
+
+    function proyectar([x, y, z]) {
+      const camara = 4;
+      const f = 450 / (z + camara);
+      return [canvas.width / 2 + x * f, canvas.height / 2 - y * f];
+    }
+
+    function dibujar() {
+      const grietas = parseInt(sGrietas.value);
+      const sep = parseFloat(sSep.value);
+      document.getElementById("vGrietas").textContent = grietas;
+      document.getElementById("vSep").textContent = sep.toFixed(2);
+
+      const figura = generarEspejoRoto(grietas, sep);
+      const pts = figura.vertices.map(v => proyectar(rotar(v)));
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(160, 20, 30, 0.22)";
+      for (const cara of figura.caras) {
+        ctx.beginPath();
+        cara.forEach((idx, n) => {
+          const [px, py] = pts[idx];
+          n === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = "#ff4d5a";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const [a, b] of figura.aristas) {
+        ctx.moveTo(pts[a][0], pts[a][1]);
+        ctx.lineTo(pts[b][0], pts[b][1]);
+      }
+      ctx.stroke();
+    }
+
+    sGrietas.addEventListener("input", dibujar);
+    sSep.addEventListener("input", dibujar);
+
+    canvas.addEventListener("mousedown", e => { arrastrando = true; ultimoX = e.clientX; ultimoY = e.clientY; });
+    window.addEventListener("mouseup", () => arrastrando = false);
+    window.addEventListener("mousemove", e => {
+      if (!arrastrando) return;
+      rotY += (e.clientX - ultimoX) * 0.01;
+      rotX += (e.clientY - ultimoY) * 0.01;
+      ultimoX = e.clientX; ultimoY = e.clientY;
+      dibujar();
+    });
+
+    dibujar();
+  </script>
+</body>
+</html>
