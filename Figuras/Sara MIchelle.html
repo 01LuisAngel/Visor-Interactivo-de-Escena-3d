@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor 3D - Roblox Studio Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></link>
+    <!-- Three.js y OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Fuente Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #1a1a1a;
+            color: #e5e5e5;
+        }
+
+        .studio-panel {
+            background: #232323;
+            border: 1px solid #333333;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .studio-card {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+        }
+
+        /* Sliders estilo Roblox Studio Neón */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 5px;
+            cursor: pointer;
+            background: #111111;
+            border-radius: 4px;
+            border: 1px solid #333333;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 4px;
+            background: #007acc;
+            border: 2px solid #ffffff;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            transition: transform 0.1s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: #0098ff;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a3a;
+            border-radius: 4px;
+        }
+
+        .btn-toggle.active {
+            background: #007acc;
+            color: #ffffff;
+            border-color: #0098ff;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col md:flex-row select-none">
+
+    <!-- VIEWPORT 3D -->
+    <div class="relative flex-1 h-full w-full overflow-hidden bg-gradient-to-b from-[#1e1e1e] to-[#121212]">
+        <canvas id="canvas3d" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+
+        <!-- Header Roblox Studio -->
+        <div class="absolute top-4 left-4 z-10 flex items-center gap-3 studio-panel px-4 py-2.5 rounded-xl shadow-lg">
+            <div class="w-9 h-9 rounded-lg bg-[#007acc] text-white flex items-center justify-center font-bold shadow-md">
+                <i class="fa-solid fa-cube text-base"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-[10px] uppercase tracking-wider text-[#007acc] font-black">Roblox Studio R15</h1>
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                </div>
+                <p class="text-xs font-bold text-white">Avatar Blocky &bull; Fiel al Diseño</p>
+            </div>
+        </div>
+
+        <!-- Selector Ambiente Roblox -->
+        <div class="absolute top-4 right-4 z-10 flex items-center gap-2 studio-panel p-1.5 rounded-xl">
+            <button id="env-studio" class="px-3 py-1.5 rounded-lg text-xs font-bold text-[#007acc] bg-[#2d2d2d] border border-[#007acc]/40 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-sun text-yellow-400"></i> Baseplate
+            </button>
+            <button id="env-sunset" class="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-[#2d2d2d] transition flex items-center gap-1.5">
+                <i class="fa-solid fa-cloud-sun text-orange-400"></i> Sunset
+            </button>
+            <button id="env-night" class="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-[#2d2d2d] transition flex items-center gap-1.5">
+                <i class="fa-solid fa-moon text-indigo-400"></i> Dark
+            </button>
+        </div>
+
+        <!-- Animaciones Roblox -->
+        <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-10">
+            <div class="studio-panel p-2 rounded-xl flex items-center gap-2 shadow-xl border border-[#333333]">
+                <span class="text-xs font-bold text-[#007acc] px-2 hidden sm:inline"><i class="fa-solid fa-person-running"></i> Animación:</span>
+                <button id="anim-idle" class="btn-toggle active px-3.5 py-1.5 rounded-lg text-xs font-bold transition bg-[#2a2a2a] text-gray-300 border border-transparent">Idle</button>
+                <button id="anim-wave" class="btn-toggle px-3.5 py-1.5 rounded-lg text-xs font-bold text-gray-300 hover:bg-[#333333] transition bg-[#2a2a2a] border border-transparent">Wave 👋</button>
+                <button id="anim-dance" class="btn-toggle px-3.5 py-1.5 rounded-lg text-xs font-bold text-gray-300 hover:bg-[#333333] transition bg-[#2a2a2a] border border-transparent">Dance 💃</button>
+            </div>
+        </div>
+
+        <!-- Controles de Cámara -->
+        <div class="absolute bottom-5 right-5 z-10 flex flex-col gap-2">
+            <button id="btn-camera-reset" title="Reset Cámara" class="studio-panel w-10 h-10 rounded-xl flex items-center justify-center text-[#007acc] hover:bg-[#2d2d2d] transition shadow-lg">
+                <i class="fa-solid fa-video text-sm"></i>
+            </button>
+            <button id="btn-auto-rotate" title="Giro Automático" class="studio-panel w-10 h-10 rounded-xl flex items-center justify-center text-[#007acc] hover:bg-[#2d2d2d] transition shadow-lg">
+                <i class="fa-solid fa-rotate text-sm"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- PANEL DE CONTROL STUDIO -->
+    <div class="w-full md:w-[400px] lg:w-[420px] studio-panel border-t md:border-t-0 md:border-l border-[#333333] flex flex-col h-[58vh] md:h-full z-20 shadow-2xl">
+        
+        <div class="p-4 border-b border-[#333333] flex items-center justify-between bg-[#1e1e1e]">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-[#2a2a2a] border border-[#3a3a3a] text-[#007acc] flex items-center justify-center font-bold">
+                    <i class="fa-solid fa-screwdriver-wrench text-xs"></i>
+                </div>
+                <div>
+                    <h2 class="text-xs font-black uppercase text-gray-200 tracking-wider">Propiedades - Explorer</h2>
+                    <p class="text-[10px] text-[#007acc] font-bold">Transformación Roblox R15</p>
+                </div>
+            </div>
+            <button id="btn-reset-all" class="px-3 py-1.5 bg-[#2a2a2a] hover:bg-[#333333] text-[#007acc] border border-[#3a3a3a] rounded-lg text-xs font-bold transition flex items-center gap-1 shadow">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-3.5">
+
+            <!-- 1. SELECTOR DE FIGURA / PARTE -->
+            <div class="studio-card p-3.5 space-y-2">
+                <label class="text-[11px] font-black text-[#007acc] uppercase tracking-wider flex items-center gap-1.5">
+                    <i class="fa-solid fa-cubes text-[#007acc]"></i> 1. Seleccionar Parte (Explorer)
+                </label>
+                <select id="select-part" class="w-full bg-[#1b1b1b] border border-[#3a3a3a] rounded-lg p-2.5 text-xs text-gray-200 font-bold focus:outline-none focus:border-[#007acc] transition cursor-pointer">
+                    <option value="characterGroup">👤 Workspace.AvatarCompleto</option>
+                    <optgroup label="Cabeza y Accesorios">
+                        <option value="head">😊 Part.Cabeza (Blocky)</option>
+                        <option value="hair">💇 Part.CabelloCastaño</option>
+                    </optgroup>
+                    <optgroup label="Torso y Ropa">
+                        <option value="vest">🧥 Part.ChalecoCafé</option>
+                        <option value="shirt">👔 Part.CamisaCrema</option>
+                        <option value="arms">🦾 Part.BrazosR15</option>
+                    </optgroup>
+                    <optgroup label="Extremidades Inferiores">
+                        <option value="pants">👖 Part.PantalonesOscuros</option>
+                        <option value="boots">👢 Part.BotasCuero</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <!-- 2. TRASLACIÓN (POSICIÓN XYZ) -->
+            <div class="studio-card p-3.5 space-y-2.5">
+                <div class="flex items-center justify-between border-b border-[#333333] pb-2">
+                    <span class="text-[11px] font-black text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-up-down-left-right text-[#007acc]"></i> 2. Posición (Position)
+                    </span>
+                    <button id="reset-pos" class="text-[10px] font-bold text-gray-400 hover:text-[#007acc] transition">Reset</button>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Posición X</span>
+                        <span id="val-posX" class="font-mono text-[#007acc]">0.00</span>
+                    </div>
+                    <input type="range" id="slider-posX" min="-3" max="3" step="0.02" value="0">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Posición Y</span>
+                        <span id="val-posY" class="font-mono text-[#007acc]">0.00</span>
+                    </div>
+                    <input type="range" id="slider-posY" min="-3" max="3" step="0.02" value="0">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Posición Z</span>
+                        <span id="val-posZ" class="font-mono text-[#007acc]">0.00</span>
+                    </div>
+                    <input type="range" id="slider-posZ" min="-3" max="3" step="0.02" value="0">
+                </div>
+            </div>
+
+            <!-- 3. ESCALA (XYZ & UNIFORME) -->
+            <div class="studio-card p-3.5 space-y-2.5">
+                <div class="flex items-center justify-between border-b border-[#333333] pb-2">
+                    <span class="text-[11px] font-black text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-expand text-emerald-400"></i> 3. Tamaño (Size / Scale)
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-300 font-bold flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" id="check-uniform" checked class="rounded accent-[#007acc] cursor-pointer w-3 h-3"> Uniforme
+                        </label>
+                        <button id="reset-scale" class="text-[10px] font-bold text-gray-400 hover:text-[#007acc] transition">Reset</button>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span id="lbl-scaleX" class="text-gray-400">Escala General</span>
+                        <span id="val-scaleX" class="font-mono text-emerald-400">1.00</span>
+                    </div>
+                    <input type="range" id="slider-scaleX" min="0.2" max="2.5" step="0.02" value="1">
+                </div>
+
+                <div id="wrapper-scaleY" class="space-y-1 hidden">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Escala Y (Alto)</span>
+                        <span id="val-scaleY" class="font-mono text-emerald-400">1.00</span>
+                    </div>
+                    <input type="range" id="slider-scaleY" min="0.2" max="2.5" step="0.02" value="1">
+                </div>
+
+                <div id="wrapper-scaleZ" class="space-y-1 hidden">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Escala Z (Profundidad)</span>
+                        <span id="val-scaleZ" class="font-mono text-emerald-400">1.00</span>
+                    </div>
+                    <input type="range" id="slider-scaleZ" min="0.2" max="2.5" step="0.02" value="1">
+                </div>
+            </div>
+
+            <!-- 4. ROTACIÓN (XYZ) -->
+            <div class="studio-card p-3.5 space-y-2.5">
+                <div class="flex items-center justify-between border-b border-[#333333] pb-2">
+                    <span class="text-[11px] font-black text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate text-amber-400"></i> 4. Rotación (Orientation)
+                    </span>
+                    <button id="reset-rot" class="text-[10px] font-bold text-gray-400 hover:text-[#007acc] transition">Reset</button>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Rotación Y (Giro)</span>
+                        <span id="val-rotY" class="font-mono text-amber-400">0°</span>
+                    </div>
+                    <input type="range" id="slider-rotY" min="-180" max="180" step="1" value="0">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Rotación X (Inclinación)</span>
+                        <span id="val-rotX" class="font-mono text-amber-400">0°</span>
+                    </div>
+                    <input type="range" id="slider-rotX" min="-180" max="180" step="1" value="0">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-gray-400">Rotación Z (Ladeo)</span>
+                        <span id="val-rotZ" class="font-mono text-amber-400">0°</span>
+                    </div>
+                    <input type="range" id="slider-rotZ" min="-180" max="180" step="1" value="0">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="p-3 border-t border-[#333333] text-center text-[10px] font-bold text-gray-500 bg-[#1a1a1a]">
+            Roblox Studio Engine &bull; R15 Blocky Rig
+        </div>
+    </div>
+
+    <!-- ENGINE THREE.JS -->
+    <script>
+        const PALETTE = {
+            skin: 0xFADBCE,
+            hair: 0x6D4327,
+            vest: 0x3B2317,
+            shirt: 0xF8F5F0,
+            pants: 0x2C2929,
+            boots: 0x5C351B,
+            buttons: 0xFACC15,
+            baseplate: 0x6b7280
+        };
+
+        let scene, camera, renderer, controls;
+        let ambientLight, mainLight, rimLight;
+        let faceTextureCanvas;
+        let currentAnimMode = 'idle';
+
+        const groups = {
+            characterGroup: new THREE.Group(),
+            head: new THREE.Group(),
+            hair: new THREE.Group(),
+            vest: new THREE.Group(),
+            shirt: new THREE.Group(),
+            arms: new THREE.Group(),
+            pants: new THREE.Group(),
+            boots: new THREE.Group(),
+            environment: new THREE.Group()
+        };
+
+        let currentSelectionKey = 'characterGroup';
+        let currentTargetObject = groups.characterGroup;
+        let joints = {};
+
+        window.onload = function() {
+            createRobloxFaceTexture();
+            initEngine();
+            buildRobloxAvatar();
+            buildBaseplate();
+            setupUIEvents();
+            animate();
+        };
+
+        function createRobloxFaceTexture() {
+            faceTextureCanvas = document.createElement('canvas');
+            faceTextureCanvas.width = 512;
+            faceTextureCanvas.height = 512;
+            const ctx = faceTextureCanvas.getContext('2d');
+
+            ctx.fillStyle = '#FADBCE';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Ojos clásicos Roblox detallados estilo anime
+            drawBlockyEye(ctx, 160, 240);
+            drawBlockyEye(ctx, 352, 240);
+
+            // Cejas
+            ctx.strokeStyle = '#5A351D';
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(110, 180); ctx.lineTo(210, 190);
+            ctx.moveTo(302, 190); ctx.lineTo(402, 180);
+            ctx.stroke();
+
+            // Nariz
+            ctx.fillStyle = '#D49582';
+            ctx.beginPath();
+            ctx.arc(256, 280, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Boca seria
+            ctx.strokeStyle = '#9E4E3D';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.moveTo(220, 360);
+            ctx.quadraticCurveTo(256, 380, 292, 360);
+            ctx.stroke();
+        }
+
+        function drawBlockyEye(ctx, cx, cy) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(cx - 45, cy - 30, 90, 60);
+
+            ctx.fillStyle = '#6D4327';
+            ctx.fillRect(cx - 25, cy - 20, 50, 40);
+
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(cx - 12, cy - 10, 24, 20);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(cx - 16, cy - 18, 10, 10);
+        }
+
+        function initEngine() {
+            const canvas = document.getElementById('canvas3d');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e1e1e);
+            scene.fog = new THREE.FogExp2(0x1e1e1e, 0.025);
+
+            camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+            camera.position.set(0, 2.5, 4.5);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 1.2, 0);
+            controls.maxPolarAngle = Math.PI / 2 + 0.05;
+            controls.minDistance = 1.5;
+            controls.maxDistance = 8;
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            mainLight.position.set(5, 8, 5);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            scene.add(mainLight);
+
+            rimLight = new THREE.DirectionalLight(0x007acc, 0.6);
+            rimLight.position.set(-5, 4, -5);
+            scene.add(rimLight);
+
+            Object.keys(groups).forEach(key => {
+                if (key !== 'environment' && key !== 'characterGroup') {
+                    groups.characterGroup.add(groups[key]);
+                }
+            });
+            scene.add(groups.characterGroup);
+            scene.add(groups.environment);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildRobloxAvatar() {
+            const skinMat = new THREE.MeshStandardMaterial({ color: PALETTE.skin, roughness: 0.4 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: PALETTE.hair, roughness: 0.3 });
+            const vestMat = new THREE.MeshStandardMaterial({ color: PALETTE.vest, roughness: 0.4 });
+            const shirtMat = new THREE.MeshStandardMaterial({ color: PALETTE.shirt, roughness: 0.5 });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: PALETTE.pants, roughness: 0.4 });
+            const bootMat = new THREE.MeshStandardMaterial({ color: PALETTE.boots, roughness: 0.3, metalness: 0.1 });
+            const buttonMat = new THREE.MeshStandardMaterial({ color: PALETTE.buttons, metalness: 0.8 });
+
+            // 1. CABEZA BLOCKY ROBLEXIANA CON STUD SUPERIOR
+            const faceTexture = new THREE.CanvasTexture(faceTextureCanvas);
+            const faceMaterials = [
+                skinMat, skinMat, skinMat, skinMat,
+                new THREE.MeshStandardMaterial({ map: faceTexture }),
+                skinMat
+            ];
+            const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), faceMaterials);
+            headMesh.position.set(0, 1.85, 0);
+            headMesh.castShadow = true;
+            groups.head.add(headMesh);
+
+            // Stud (Tachón clásico Roblox en la cabeza)
+            const studMat = new THREE.MeshStandardMaterial({ color: PALETTE.skin, roughness: 0.4 });
+            const studMesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.18), studMat);
+            studMesh.position.set(0, 2.16, 0);
+            groups.head.add(studMesh);
+
+            const neckMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.2), skinMat);
+            neckMesh.position.set(0, 1.52, 0);
+            groups.head.add(neckMesh);
+
+            // 2. CABELLO BLOCKY CASTAÑO
+            const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.35, 0.6), hairMat);
+            hairTop.position.set(0, 2.02, -0.02);
+            groups.hair.add(hairTop);
+
+            const sideHairL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.35), hairMat);
+            sideHairL.position.set(-0.35, 1.5, 0.05);
+            groups.hair.add(sideHairL);
+
+            const sideHairR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.35), hairMat);
+            sideHairR.position.set(0.35, 1.5, 0.05);
+            groups.hair.add(sideHairR);
+
+            const backHair = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.1, 0.28), hairMat);
+            backHair.position.set(0, 1.4, -0.22);
+            groups.hair.add(backHair);
+
+            // 3. CAMISA CREMA & CUELLO
+            const shirtMesh = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.32), shirtMat);
+            shirtMesh.position.set(0, 1.05, 0);
+            shirtMesh.castShadow = true;
+            groups.shirt.add(shirtMesh);
+
+            // 4. CHALECO CAFÉ & BOTONES
+            const vestMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.68, 0.35), vestMat);
+            vestMesh.position.set(0, 1.05, 0.01);
+            vestMesh.castShadow = true;
+            groups.vest.add(vestMesh);
+
+            for (let i = 0; i < 4; i++) {
+                const btn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.03), buttonMat);
+                btn.position.set(0, 1.25 - (i * 0.15), 0.19);
+                groups.vest.add(btn);
+            }
+
+            // 5. BRAZOS R15 BLOCKY
+            const armGeo = new THREE.BoxGeometry(0.22, 0.7, 0.25);
+            
+            const armL = new THREE.Mesh(armGeo, shirtMat);
+            armL.position.set(-0.46, 1.05, 0);
+            groups.arms.add(armL);
+            joints.armL = armL;
+
+            const handL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.18), skinMat);
+            handL.position.set(-0.46, 0.6, 0);
+            groups.arms.add(handL);
+
+            const armR = new THREE.Mesh(armGeo, shirtMat);
+            armR.position.set(0.46, 1.05, 0);
+            groups.arms.add(armR);
+
+            // 6. PANTALONES OSCUROS
+            const pantsMesh = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.65, 0.3), pantsMat);
+            pantsMesh.position.set(0, 0.45, 0);
+            groups.pants.add(pantsMesh);
+
+            // 7. BOTAS BLOCKY
+            const bootGeo = new THREE.BoxGeometry(0.24, 0.5, 0.3);
+            const bootL = new THREE.Mesh(bootGeo, bootMat);
+            bootL.position.set(-0.15, 0.02, 0.01);
+            groups.boots.add(bootL);
+
+            const bootR = new THREE.Mesh(bootGeo, bootMat);
+            bootR.position.set(0.15, 0.02, 0.01);
+            groups.boots.add(bootR);
+        }
+
+        function buildBaseplate() {
+            // Placa base clásica Roblox (Gris con bordes)
+            const plateGeo = new THREE.BoxGeometry(5, 0.2, 5);
+            const plateMat = new THREE.MeshStandardMaterial({ color: PALETTE.baseplate, roughness: 0.9 });
+            const plate = new THREE.Mesh(plateGeo, plateMat);
+            plate.position.set(0, -0.11, 0);
+            plate.receiveShadow = true;
+            groups.environment.add(plate);
+
+            const grid = new THREE.GridHelper(5, 10, 0x007acc, 0x444444);
+            grid.position.set(0, -0.01, 0);
+            groups.environment.add(grid);
+        }
+
+        function setupUIEvents() {
+            const selectPart = document.getElementById('select-part');
+            const sliderPosX = document.getElementById('slider-posX');
+            const sliderPosY = document.getElementById('slider-posY');
+            const sliderPosZ = document.getElementById('slider-posZ');
+            const sliderScaleX = document.getElementById('slider-scaleX');
+            const sliderScaleY = document.getElementById('slider-scaleY');
+            const sliderScaleZ = document.getElementById('slider-scaleZ');
+            const sliderRotX = document.getElementById('slider-rotX');
+            const sliderRotY = document.getElementById('slider-rotY');
+            const sliderRotZ = document.getElementById('slider-rotZ');
+            const checkUniform = document.getElementById('check-uniform');
+
+            const valPosX = document.getElementById('val-posX');
+            const valPosY = document.getElementById('val-posY');
+            const valPosZ = document.getElementById('val-posZ');
+            const valScaleX = document.getElementById('val-scaleX');
+            const valScaleY = document.getElementById('val-scaleY');
+            const valScaleZ = document.getElementById('val-scaleZ');
+            const valRotX = document.getElementById('val-rotX');
+            const valRotY = document.getElementById('val-rotY');
+            const valRotZ = document.getElementById('val-rotZ');
+
+            const wrapperScaleY = document.getElementById('wrapper-scaleY');
+            const wrapperScaleZ = document.getElementById('wrapper-scaleZ');
+            const lblScaleX = document.getElementById('lbl-scaleX');
+
+            selectPart.addEventListener('change', (e) => {
+                currentSelectionKey = e.target.value;
+                currentTargetObject = groups[currentSelectionKey] || groups.characterGroup;
+                syncUIFromTarget();
+            });
+
+            checkUniform.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    wrapperScaleY.classList.add('hidden');
+                    wrapperScaleZ.classList.add('hidden');
+                    lblScaleX.innerText = "Escala General";
+                } else {
+                    wrapperScaleY.classList.remove('hidden');
+                    wrapperScaleZ.classList.remove('hidden');
+                    lblScaleX.innerText = "Escala X";
+                }
+            });
+
+            [sliderPosX, sliderPosY, sliderPosZ].forEach(slider => {
+                slider.addEventListener('input', () => {
+                    currentTargetObject.position.set(
+                        parseFloat(sliderPosX.value),
+                        parseFloat(sliderPosY.value) + (currentSelectionKey === 'characterGroup' ? 0 : currentTargetObject.position.y),
+                        parseFloat(sliderPosZ.value)
+                    );
+                    valPosX.innerText = parseFloat(sliderPosX.value).toFixed(2);
+                    valPosY.innerText = parseFloat(sliderPosY.value).toFixed(2);
+                    valPosZ.innerText = parseFloat(sliderPosZ.value).toFixed(2);
+                });
+            });
+
+            sliderScaleX.addEventListener('input', () => {
+                const s = parseFloat(sliderScaleX.value);
+                if (checkUniform.checked) {
+                    currentTargetObject.scale.set(s, s, s);
+                    valScaleX.innerText = s.toFixed(2);
+                } else {
+                    currentTargetObject.scale.x = s;
+                    valScaleX.innerText = s.toFixed(2);
+                }
+            });
+
+            sliderScaleY.addEventListener('input', () => {
+                if (!checkUniform.checked) {
+                    currentTargetObject.scale.y = parseFloat(sliderScaleY.value);
+                    valScaleY.innerText = parseFloat(sliderScaleY.value).toFixed(2);
+                }
+            });
+
+            sliderScaleZ.addEventListener('input', () => {
+                if (!checkUniform.checked) {
+                    currentTargetObject.scale.z = parseFloat(sliderScaleZ.value);
+                    valScaleZ.innerText = parseFloat(sliderScaleZ.value).toFixed(2);
+                }
+            });
+
+            [sliderRotX, sliderRotY, sliderRotZ].forEach(slider => {
+                slider.addEventListener('input', () => {
+                    currentTargetObject.rotation.x = THREE.MathUtils.degToRad(parseFloat(sliderRotX.value));
+                    currentTargetObject.rotation.y = THREE.MathUtils.degToRad(parseFloat(sliderRotY.value));
+                    currentTargetObject.rotation.z = THREE.MathUtils.degToRad(parseFloat(sliderRotZ.value));
+
+                    valRotX.innerText = sliderRotX.value + '°';
+                    valRotY.innerText = sliderRotY.value + '°';
+                    valRotZ.innerText = sliderRotZ.value + '°';
+                });
+            });
+
+            document.getElementById('reset-pos').onclick = () => {
+                sliderPosX.value = 0; sliderPosY.value = 0; sliderPosZ.value = 0;
+                currentTargetObject.position.set(0, currentSelectionKey === 'characterGroup' ? 0 : currentTargetObject.position.y, 0);
+                valPosX.innerText = "0.00"; valPosY.innerText = "0.00"; valPosZ.innerText = "0.00";
+            };
+
+            document.getElementById('reset-scale').onclick = () => {
+                sliderScaleX.value = 1; sliderScaleY.value = 1; sliderScaleZ.value = 1;
+                currentTargetObject.scale.set(1, 1, 1);
+                valScaleX.innerText = "1.00"; valScaleY.innerText = "1.00"; valScaleZ.innerText = "1.00";
+            };
+
+            document.getElementById('reset-rot').onclick = () => {
+                sliderRotX.value = 0; sliderRotY.value = 0; sliderRotZ.value = 0;
+                currentTargetObject.rotation.set(0, 0, 0);
+                valRotX.innerText = "0°"; valRotY.innerText = "0°"; valRotZ.innerText = "0°";
+            };
+
+            document.getElementById('btn-reset-all').onclick = () => {
+                Object.values(groups).forEach(g => {
+                    if (g !== groups.environment) {
+                        g.position.set(0, 0, 0);
+                        g.scale.set(1, 1, 1);
+                        g.rotation.set(0, 0, 0);
+                    }
+                });
+                syncUIFromTarget();
+            };
+
+            // Animaciones Roblox
+            const btnIdle = document.getElementById('anim-idle');
+            const btnWave = document.getElementById('anim-wave');
+            const btnDance = document.getElementById('anim-dance');
+
+            [btnIdle, btnWave, btnDance].forEach(btn => {
+                btn.onclick = () => {
+                    [btnIdle, btnWave, btnDance].forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    if (btn === btnIdle) currentAnimMode = 'idle';
+                    if (btn === btnWave) currentAnimMode = 'wave';
+                    if (btn === btnDance) currentAnimMode = 'dance';
+                };
+            });
+
+            // Ambientes
+            document.getElementById('env-studio').onclick = () => {
+                scene.background.set(0x1e1e1e);
+                scene.fog.color.set(0x1e1e1e);
+                mainLight.color.set(0xffffff);
+                rimLight.color.set(0x007acc);
+                ambientLight.intensity = 0.8;
+            };
+            document.getElementById('env-sunset').onclick = () => {
+                scene.background.set(0x1d1410);
+                scene.fog.color.set(0x1d1410);
+                mainLight.color.set(0xffab76);
+                rimLight.color.set(0xfb923c);
+                ambientLight.intensity = 0.6;
+            };
+            document.getElementById('env-night').onclick = () => {
+                scene.background.set(0x0f0f17);
+                scene.fog.color.set(0x0f0f17);
+                mainLight.color.set(0x818cf8);
+                rimLight.color.set(0xa855f7);
+                ambientLight.intensity = 0.5;
+            };
+
+            document.getElementById('btn-camera-reset').onclick = () => {
+                camera.position.set(0, 2.5, 4.5);
+                controls.target.set(0, 1.2, 0);
+                controls.update();
+            };
+
+            let autoRotateActive = false;
+            document.getElementById('btn-auto-rotate').onclick = (e) => {
+                autoRotateActive = !autoRotateActive;
+                controls.autoRotate = autoRotateActive;
+                controls.autoRotateSpeed = 3.0;
+                e.currentTarget.classList.toggle('text-yellow-400', autoRotateActive);
+            };
+        }
+
+        function syncUIFromTarget() {
+            document.getElementById('slider-posX').value = currentTargetObject.position.x;
+            document.getElementById('slider-posY').value = currentTargetObject.position.y;
+            document.getElementById('slider-posZ').value = currentTargetObject.position.z;
+            document.getElementById('val-posX').innerText = currentTargetObject.position.x.toFixed(2);
+            document.getElementById('val-posY').innerText = currentTargetObject.position.y.toFixed(2);
+            document.getElementById('val-posZ').innerText = currentTargetObject.position.z.toFixed(2);
+
+            document.getElementById('slider-scaleX').value = currentTargetObject.scale.x;
+            document.getElementById('val-scaleX').innerText = currentTargetObject.scale.x.toFixed(2);
+
+            document.getElementById('slider-rotX').value = THREE.MathUtils.radToDeg(currentTargetObject.rotation.x).toFixed(0);
+            document.getElementById('slider-rotY').value = THREE.MathUtils.radToDeg(currentTargetObject.rotation.y).toFixed(0);
+            document.getElementById('slider-rotZ').value = THREE.MathUtils.radToDeg(currentTargetObject.rotation.z).toFixed(0);
+            document.getElementById('val-rotX').innerText = document.getElementById('slider-rotX').value + '°';
+            document.getElementById('val-rotY').innerText = document.getElementById('slider-rotY').value + '°';
+            document.getElementById('val-rotZ').innerText = document.getElementById('slider-rotZ').value + '°';
+        }
+
+        function onWindowResize() {
+            const canvas = document.getElementById('canvas3d');
+            camera.aspect = canvas.clientWidth / canvas.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now() * 0.003;
+
+            if (currentAnimMode === 'idle') {
+                groups.characterGroup.position.y = Math.sin(time * 2) * 0.03;
+                if (joints.armL) joints.armL.rotation.z = Math.sin(time * 2) * 0.05;
+            } else if (currentAnimMode === 'wave') {
+                if (joints.armL) {
+                    joints.armL.rotation.z = -1.5 + Math.sin(time * 8) * 0.3;
+                    joints.armL.rotation.x = 0.5;
+                }
+            } else if (currentAnimMode === 'dance') {
+                groups.characterGroup.rotation.y = Math.sin(time * 4) * 0.2;
+                groups.characterGroup.position.y = Math.abs(Math.sin(time * 6)) * 0.08;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
